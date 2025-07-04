@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>综合查询2.0</title>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* 使用更适合代码和终端的字体 */
+        body, .font-mono {
+            font-family: 'Roboto Mono', monospace;
+        }
+
+        /* 隐藏主滚动条，因为我们将使用自定义的滚动区域 */
+        html, body {
+            overflow: hidden;
+        }
+
+        /* 美化输出区域的滚动条 (适用于 Webkit 浏览器) */
+        #output::-webkit-scrollbar {
+            width: 8px;
+        }
+        #output::-webkit-scrollbar-track {
+            background: #1f2937; /* gray-800 */
+        }
+        #output::-webkit-scrollbar-thumb {
+            background-color: #4b5563; /* gray-600 */
+            border-radius: 4px;
+            border: 2px solid #1f2937; /* gray-800 */
+        }
+        #output::-webkit-scrollbar-thumb:hover {
+            background-color: #6b7280; /* gray-500 */
+        }
+
+        /* 确保输出区域的文本是可选的 */
+        #output {
+            user-select: text;
+        }
+
+        /* 隐藏原始输入框的边框和背景，并移除默认的resize handle */
+        #input {
+            background-color: transparent;
+            border: none;
+            outline: none;
+            caret-color: white; /* 设置输入光标颜色 */
+            resize: none; /* 禁止用户手动拖动调整大小 */
+            overflow-y: hidden; /* 隐藏滚动条，因为我们会动态调整高度 */
+        }
+        
+        /* 确保链接在暗色背景下清晰可见 */
+        a {
+            color: #60a5fa; /* Tailwind blue-400 */
+            text-decoration: underline;
+        }
+        a:hover {
+            color: #93c5fd; /* Tailwind blue-300 */
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-200">
+
+    <div id="terminal" class="p-4 md:p-6 lg:p-8 w-full max-w-4xl mx-auto h-screen flex flex-col">
+        
+        <div id="output" class="flex-1 overflow-y-auto pr-2"></div>
+
+        <div id="input-line" class="flex items-start mt-4 flex-shrink-0 border border-gray-700 rounded-lg p-2">
+            <textarea id="input" rows="3" class="bg-transparent border-none text-gray-200 w-full focus:outline-none font-mono"></textarea>
+        </div>
+    </div>
+
+    <script>
+        // --- 数据区 ---
+        // 航空公司详细数据
+        const AIRLINE_DETAIL_DATA = {
+        "3U": {"航空公司":"四川航空","票证":"876","官网":"https://www.sichuanair.com/","国内运输总条件":"https://www.sichuanair.com/tickets-transportation","国内客票使用条件":"https://www.sichuanair.com/tickets-ticket-provisions/","购票须知":"https://www.sichuanair.com/travel-tips/","错购规定":"https://www.sichuanair.com/travel-tips/","重复购票规定":"略","改名改证件规定":"略","病退规定":"https://www.sichuanair.com/travel-tips/","客票验证":"略","航班动态":"https://flights.sichuanair.com/3uair/ibe/common/queryFlightStatus.do","不正常航班证明":"https://serviceapp.sichuanair.com/views/flightDelay/ibe/flightDelay.html?channelType=IBE"},
+        "8L": {"航空公司":"祥鹏航空","票证":"859","官网":"https://www.luckyair.net/","国内运输总条件":"https://www.luckyair.net/micro/main/help/641d55d2bac2d632d21104ee","国内客票使用条件":"https://www.luckyair.net/micro/main/help/641d4bbf230c607e69a9a9e9","购票须知":"https://www.luckyair.net/micro/main/help/641d4bbf230c607e69a9a99b","错购规定":"https://www.luckyair.net/micro/main/help/641d4bbf230c607e69a9a9c0","重复购票规定":"https://www.luckyair.net/micro/main/help/641d4bbf230c607e69a9a9c0","改名改证件规定":"https://www.luckyair.net/micro/main/help/641d4bbf230c607e69a9a9c0","病退规定":"https://www.luckyair.net/micro/main/help/650811cda3baa619bcd4c691","客票验证":"https://www.luckyair.net/micro/main/ticketVerify 仅验真","航班动态":"https://www.luckyair.net/micro/main/flight/status","不正常航班证明":"https://www.luckyair.net/micro/main/delay/segment"},
+        "9C": {"航空公司":"春秋航空","票证":"略","官网":"http://www.ch.com/","国内运输总条件":"https://flights.ch.com/general-conditions","国内客票使用条件":"https://flights.ch.com/general-conditions","购票须知":"https://flights.ch.com/notice-travelers","错购规定":"参见客票使用条件右侧的错购处置","重复购票规定":"参见客票使用条件右侧的错购处置","改名改证件规定":"参见客票使用条件右侧的错购处置","病退规定":"参见运输总条件","客票验证":"https://flights.ch.com/show-check-ticket 仅验真","航班动态":"https://flights.ch.com/flight-info","不正常航班证明":"https://help.ch.com/Services/AbnormalFlightCertificate"},
+        "9D": {"航空公司":"天骄航空","票证":"568","官网":"https://www.tianjiao-air.com/","国内运输总条件":"https://www.tianjiao-air.com/stcontent/menupage/38c32e84-cd2b-41e2-82c4-f2dc2c6fda62/47a74488-2b5d-4c81-bddf-3d183afaabb3/c3038abb-27b9-47dc-bace-1a2db22c91f1","国内客票使用条件":"https://www.tianjiao-air.com/stcontent/menupage/38c32e84-cd2b-41e2-82c4-f2dc2c6fda62/47a74488-2b5d-4c81-bddf-3d183afaabb3/cbf7b558-3308-4dfc-8878-0d7f2ac795bc","购票须知":"https://www.tianjiao-air.com/stcontent/menupage/38c32e84-cd2b-41e2-82c4-f2dc2c6fda62/47a74488-2b5d-4c81-bddf-3d183afaabb3/71fa5970-2361-4d46-b656-37dfc63b722d","错购规定":"略","重复购票规定":"略","改名改证件规定":"略","病退规定":"略","客票验证":"略","航班动态":"https://www.tianjiao-air.com/dynamic","不正常航班证明":"https://www.tianjiao-air.com/proofSearch"},
+        "9H": {"航空公司":"长安航空","票证":"856","官网":"https://www.airchangan.com/","国内运输总条件":"https://www.airchangan.com/content/ab72dae6-c19f-458e-b0b9-72bd792a87b6","国内客票使用条件":"参见购票须知","购票须知":"https://www.airchangan.com/content/6afc62ed-ab13-4ac9-8bc2-144ff0753d74","错购规定":"参见购票须知","重复购票规定":"略","改名改证件规定":"略","病退规定":"参见购票须知","客票验证":"略","航班动态":"https://www.airchangan.com/flightDynamic","不正常航班证明":"https://www.tianjiao-air.com/proofSearch"},
+        "A6": {"航空公司":"湖南航空","票证":"389","官网":"https://www.redair.cn/","国内运输总条件":"https://www.redair.cn/doc/single/transport_protocol","国内客票使用条件":"https://www.redair.cn/pss/service?cid=3","购票须知":"https://www.redair.cn/pss/service?cid=1","错购规定":"参见国内客票使用条件","重复购票规定":"参见国内客票使用条件","改名改证件规定":"参见国内客票使用条件","病退规定":"参见国内客票使用条件","客票验证":"https://www.redair.cn/service/checkticket 仅验真","航班动态":"https://www.redair.cn/service/aoc","不正常航班证明":"略"},
+        "AQ": {"航空公司":"九元航空","票证":"902","官网":"http://9air.com/","国内运输总条件":"http://9air.com/zh-CN/agreement/explain?id=Ch-conditionDomestic&tagId=Ch-booter&tagName=中文底部导航&label=运输规定","国内客票使用条件":"http://9air.com/zh-CN/agreement/explain?id=Ch-administrationRegulations&tagId=Ch-booter&tagName=中文底部导航&label=运输规定","购票须知":"http://9air.com/zh-CN/agreement/explain?id=旅客须知（国内）&tagId=Ch-booter&tagName=中文底部导航&label=运输规定","错购规定":"略","重复购票规定":"略","改名改证件规定":"略","病退规定":"略","客票验证":"https://www.9air.com/zh-CN/ticketValidate","航班动态":"http://9air.com/zh-CN/flightDynamics","不正常航班证明":"https://9air.com/zh-CN/irregularFlightCertify"},
+        "BK": {"航空公司":"奥凯航空","票证":"866","官网":"https://www.okair.net/","国内运输总条件":"https://www.okair.net/info.html#/helpGuide/transferIn","国内客票使用条件":"https://www.okair.net/info.html#/helpGuide/cabinIn","购票须知":"略","错购规定":"略","重复购票规定":"略","改名改证件规定":"略","病退规定":"略","客票验证":"略","航班动态":"https://www.okair.net/services.html#/airlineStatus","不正常航班证明":"https://www.okair.net/services.html#/delayStatment"},
+        "CA": {"航空公司":"中国国际航空","票证":"999","官网":"https://www.airchina.com.cn/","国内运输总条件":"https://webresource.airchina.com.cn/zh-CN/content/trans_conditions/general/?hySource=airchina-pc&hyUploadType=series","国内客票使用条件":"https://webresource.airchina.com.cn/zh-CN/content/trans_conditions/refund/?hySource=airchina-pc&hyUploadType=series","购票须知":"略","错购规定":"略","重复购票规定":"略","改名改证件规定":"略","病退规定":"略","客票验证":"https://m.airchina.com/ac/assets/html/jipiao_yanzhen/jipiao_yanzhen.jsp?lang=zhcn 必须登录","航班动态":"https://www.airchina.com.cn/zh-CN/flight/query-services/flight-dynamics 官网覆盖日期较小，微信小程序覆盖日期较广","不正常航班证明":"https://www.airchina.com.cn/zh-CN/flight/query-services/flight-delay"},
+        "CN": {"航空公司":"大新华航空","票证":"895","官网":"https://www.hnair.com/","国内运输总条件":"https://www.hnair.com/lvxingxinxi/cxzb/ysztj/","国内客票使用条件":"https://www.hnair.com/lvxingxinxi/cxzb/ysztj/gnkpsygd/","购票须知":"https://www.hnair.com/lvxingxinxi/cxzb/lkxz/","错购规定":"略","重复购票规定":"略","改名改证件规定":"略","病退规定":"略","客票验证":"https://new.hnair.com/hainanair/ibe/common/ticketcheck.do 仅验真，必须登录","航班动态":"https://opcflt.hnair.com/hnairweb/","不正常航班证明":"https://zzgq.hnair.com/ywzm# 仅限微信小程序、APP、公众号"},
+        "CZ": {"航空公司":"南方航空","票证":"784","官网":"https://www.csair.com/","国内运输总条件":"https://www.csair.com/cn/tourguide/booking/orders/order/gnysztj/","国内客票使用条件":"https://www.csair.com/cn/tourguide/booking/orders/order/nhb2cgnkpsytjzz/","购票须知":"https://www.csair.com/cn/tourguide/booking/orders/order/lvkexuzhi/guonei/index.shtml","错购规定":"略","重复购票规定":"略","改名改证件规定":"略","病退规定":"略","客票验证":"https://extra.csair.com/content/checkTicket/index.html?lang=zh#/search 必须登录，客票状态不明","航班动态":"https://www.csair.com/cn/online/flight_dynamic/","不正常航班证明":"https://extra.csair.com/content/flightDelay/index.html#/login"},
+        "DR": {"航空公司":"瑞丽航空","票证":"299","官网":"https://www.rlair.net/","国内运输总条件":"https://www.rlair.net/#/infoService/211","国内客票使用条件":"https://www.rlair.net/#/infoService/522","购票须知":"https://www.rlair.net/#/infoService/3","错购规定":"参见国内客票使用条件","重复购票规定":"参见国内客票使用条件","改名改证件规定":"参见国内客票使用条件","病退规定":"参见国内客票使用条件","客票验证":"略","航班动态":"https://www.rlair.net/#/selfCenter/flightSatuation","不正常航班证明":"https://www.rlair.net/#/selfCenter/flightDelay 必须登录"},
+        "DZ": {"航空公司":"东海航空","票证":"893","官网":"https://www.donghaiair.cn/","国内运输总条件":"https://www.donghaiair.com/html/passengers-notice/notice-index.html?type=SYS0203?type=SYS0203","国内客票使用条件":"https://www.donghaiair.com/html/passengers-notice/notice-index.html?type=SYS0203?type=SYS0203","购票须知":"https://www.donghaiair.com/html/passengers-notice/notice-index.html?type=SYS0203?type=SYS0203","错购规定":"略","重复购票规定":"略","改名改证件规定":"略","病退规定":"略","客票验证":"略","航班动态":"https://www.donghaiair.com/html/flight-dynamics/dynamics-search.html","不正常航班证明":"https://www.donghaiair.com/html/travel-assistant/flight-delays.html"},
+        "EU": {"航空公司":"成都航空","票证":"811","官网":"https://www.cdal.com.cn/","国内运输总条件":"https://www.cdal.com.cn/stdair/airline/eu/static_term/HeadTransportationConditions?sign=true","国内客票使用条件":"https://www.cdal.com.cn/stdair/airline/eu/static_term/HeadHelpTicketregulations?sign=true","购票须知":"https://www.cdal.com.cn/stdair/airline/eu/static_term/HeadTravelTips?sign=true","错购规定":"https://www.cdal.com.cn/stdair/airline/eu/static_term/HeadTravelTips?sign=true","重复购票规定":"参见国内客票使用条件","改名改证件规定":"略","病退规定":"参见国内客票使用条件","客票验证":"略","航班动态":"https://m.cdal.com.cn/TRPFlight/index.html#/flightDynamics?airlines=EU&openid=oXpaguJjsagVGqSKXAxy3PlxxNz0","不正常航班证明":"略"},
+        "FM": {"航空公司":"上海航空","票证":"781","官网":"https://www.ceair.com/","国内运输总条件":"https://www.ceair.com/global/static/Announcement/TravelTips/dsGeneralCondition/chinaEasternLuggageRules/domesticRules/index.html","国内客票使用条件":"https://www.ceair.com/global/static/Announcement/ScheduledGuidelines/passengerNotice/domesticTicketUseConditions/","购票须知":"https://www.ceair.com/global/static/Announcement/ScheduledGuidelines/passengerNotice/domesticTicketUseConditions/","错购规定":"https://www.ceair.com/global/static/Announcement/ScheduledGuidelines/passengerNotice/SpecialRefundChangeRequire/","重复购票规定":"https://www.ceair.com/global/static/Announcement/ScheduledGuidelines/passengerNotice/SpecialRefundChangeRequire/","改名改证件规定":"https://www.ceair.com/global/static/Announcement/ScheduledGuidelines/passengerNotice/SpecialRefundChangeRequire/","病退规定":"https://www.ceair.com/global/static/Announcement/ScheduledGuidelines/passengerNotice/SpecialRefundChangeRequire/","客票验证":"https://www.ceair.com/self-service/after-service/check-ticket 仅验真，微信小程序可查价格","航班动态":"https://www.ceair.com/self-service/before/flight-status 官网不显示变动原因，APP及微信小程序会展示变动原因","不正常航班证明":"https://ebapp.ceair.com/IrregularFlight/WebApp/IrrPrint/common.html"},
+        "FU": {"航空公司":"福州航空","票证":"666","官网":"http://www.fuzhou-air.cn/","国内运输总条件":"http://www.fuzhou-air.cn/micro/main/help/640de5a7b008a77243c6b5d0","国内客票使用条件":"http://www.fuzhou-air.cn/micro/main/help/63f73582dcfc5e1bc4c96d5b","购票须知":"http://www.fuzhou-air.cn/micro/main/help/63db6994257effa4641ba38f","错购规定":"略","重复购票规定":"略","改名改证件规定":"略","病退规定":"略","客票验证":"http://www.fuzhou-air.cn/micro/main/ticketVerify 仅验真","航班动态":"https://www.fuzhou-air.cn/micro/main/flight/status?","不正常航班证明":"https://www.fuzhou-air.cn/micro/main/delay/segment"},
+        "G5": {"航空公司":"华夏航空","票证":"987","官网":"https://www.chinaexpressair.com/","国内运输总条件":"https://www.chinaexpressair.com/help/tkt/passengerNotice.html","国内客票使用条件":"https://www.chinaexpressair.com/help/tkt/cabinPriceFee.html","购票须知":"https://www.chinaexpressair.com/help/tkt/noticeWebsiteBooking.html","错购规定":"参见国内客票使用条件","重复购票规定":"参见国内客票使用条件","改名改证件规定":"参见国内客票使用条件","病退规定":"参见国内客票使用条件","客票验证":"https://www.chinaexpressair.com/b2cweb/passticketverify 必须登录，建议优先微信小程序，有价格无客票状态","航班动态":"https://www.chinaexpressair.com/b2cweb/flightdynamic 必须登录","不正常航班证明":"https://www.chinaexpressair.com/b2cweb/flightDelay"},
+        "GJ": {"航空公司":"长龙航空","票证":"891","官网":"https://www.loongair.cn/","国内运输总条件":"https://weixin.loongair.cn/#/travel/","国内客票使用条件":"https://weixin.loongair.cn/#/travel/","购票须知":"https://weixin.loongair.cn/#/travel/","错购规定":"略","重复购票规定":"参见退改签规定","改名改证件规定":"略","病退规定":"参见退改签规定","客票验证":"小程序机票验真，客票状态只有【已使用】能用","航班动态":"https://www.loongair.cn/ 首页第四栏","不正常航班证明":"https://www.loongair.cn/#/web/custom/irregularFlight"},
+        "GS": {"航空公司":"天津航空","票证":"826","官网":"https://www.tianjin-air.com/","国内运输总条件":"https://www.tianjin-air.com/stcontent/menupage/3c5a46d1-a137-4474-b37e-65c4f680cf31/dc5da5dd-6353-4e86-9c8d-aa5056de60c0/4ef2ee04-b130-4fcb-b644-0f7ec7d23ac2","国内客票使用条件":"https://www.tianjin-air.com/stcontent/menupage/3c5a46d1-a137-4474-b37e-65c4f680cf31/dc5da5dd-6353-4e86-9c8d-aa5056de60c0/82a815bc-c042-4335-8c66-8ef89f46957b","购票须知":"https://www.tianjin-air.com/stcontent/menupage/edf4ac76-51cc-4bf3-ac2a-6aa596ddbeeb/ffce28d9-16fb-4b6d-8381-8ef615c129ec/76e687c6-cef4-4416-be66-f8c37ecb994a/ad619a9f-17dd-41d6-aa16-34d328962090","错购规定":"https://www.tianjin-air.com/stcontent/menupage/edf4ac76-51cc-4bf3-ac2a-6aa596ddbeeb/9be1a313-b77d-4f8c-8f06-37b2d02dc48c/f5cb1ad0-b164-4121-bf95-3bd4ce79c22b/5d619714-4f4e-4ed5-9974-8dc2a6c425ab","重复购票规定":"https://www.tianjin-air.com/stcontent/menupage/edf4ac76-51cc-4bf3-ac2a-6aa596ddbeeb/9be1a313-b77d-4f8c-8f06-37b2d02dc48c/f5cb1ad0-b164-4121-bf95-3bd4ce79c22b/5d619714-4f4e-4ed5-9974-8dc2a6c425ab","改名改证件规定":"https://www.tianjin-air.com/stcontent/menupage/edf4ac76-51cc-4bf3-ac2a-6aa596ddbeeb/9be1a313-b77d-4f8c-8f06-37b2d02dc48c/f5cb1ad0-b164-4121-bf95-3bd4ce79c22b/5d619714-4f4e-4ed5-9974-8dc2a6c425ab","病退规定":"参见客票使用条件","客票验证":"略","航班动态":"https://www.tianjin-air.com/dynamic","不正常航班证明":"https://www.tianjin-air.com/stcontent/blankpage/c7b8c183-d0b2-456d-a395-a7fda6af7ab2"},
+        "GT": {"航空公司":"桂林航空","票证":"730","官网":"https://www.airguilin.com/stdair/airline/gt/homepage","国内运输总条件":"https://www.airguilin.com/stdair/airline/gt/static_term/HeadPassengerAndBaggageNew?sign=true","国内客票使用条件":"https://www.airguilin.com/stdair/airline/gt/static_term/HeadRefundAndUpgrades?sign=true","购票须知":"https://www.airguilin.com/stdair/airline/gt/static_term/HeadPassengerNotice?sign=true","错购规定":"略","重复购票规定":"略","改名改证件规定":"略","病退规定":"略","客票验证":"略","航班动态":"https://www.airguilin.com/stdair/flightDynamics/flightDynamicsMainTSFS","不正常航班证明":"https://www.airguilin.com/stdair/flightDelayProof/flightDelayProofMain"},
+        "GX": {"航空公司":"北部湾航空","票证":"872","官网":"https://www.gxairlines.com/","国内运输总条件":"https://www.gxairlines.com/stdair/airline/gx/static_term/dtctInter.pdf?sign=true","国内客票使用条件":"https://www.gxairlines.com/stdair/airline/gx/static_term/SummaryOfChargingStandards?sign=true","购票须知":"https://www.gxairlines.com/stdair/airline/gx/static_term/TicketPurchaseInstructions?sign=true","错购规定":"略","重复购票规定":"略","改名改证件规定":"略","病退规定":"略","客票验证":"微信小程序","航班动态":"https://www.gxairlines.com/stdair/flightDynamics/flightDynamicsMainTSFS","不正常航班证明":"https://www.gxairlines.com/stdair/flightDelayProof/flightDelayProofMain"},
+        "GY": {"航空公司":"多彩贵州航空","票证":"661","官网":"https://www.cgzair.com/","国内运输总条件":"https://www.cgzair.com/bzzx/txts/gnys.html","国内客票使用条件":"https://www.cgzair.com/bzzx/txts/ddjcw.html","购票须知":"https://www.cgzair.com/bzzx/xqyd/lkxz.html?menu=%E6%97%85%E5%AE%A2%E9%A1%BB%E7%9F%A5","错购规定":"略","重复购票规定":"略","改名改证件规定":"略","病退规定":"略","客票验证":"https://www.cgzair.com/yss/commonquery-passengerticket/receptionList 微信小程序，仅验真","航班动态":"https://www.cgzair.com/yss/flight-dynamics/","不正常航班证明":"https://www.cgzair.com/yss/flight-delay"},
+        "HO": {"航空公司":"吉祥航空","票证":"018","官网":"https://www.juneyaoair.com/","国内运输总条件":"https://www.juneyaoair.com/customer-server/transport-factor","国内客票使用条件":"https://www.juneyaoair.com/customer-server/transport-factor","购票须知":"https://www.juneyaoair.com/customer-server/transport-factor","错购规定":"略","重复购票规定":"略","改名改证件规定":"略","病退规定":"略","客票验证":"https://www.juneyaoair.com/after-sale/ticket-verification 必须登录，可能会创建电子行程单","航班动态":"https://www.juneyaoair.com/flightDynamic/index","不正常航班证明":"https://www.juneyaoair.com/after-sale/flight-abnormal/print"},
+        "HU": {"航空公司":"海南航空","票证":"880","官网":"https://www.hnair.com/","国内运输总条件":"https://www.hnair.com/lvxingxinxi/cxzb/ysztj/","国内客票使用条件":"https://www.hnair.com/lvxingxinxi/cxzb/ysztj/gnkpsygd/","购票须知":"https://www.hnair.com/lvxingxinxi/cxzb/lkxz/","错购规定":"略","重复购票规定":"略","改名改证件规定":"略","病退规定":"略","客票验证":"https://new.hnair.com/hainanair/ibe/common/ticketcheck.do 仅验真，必须登录","航班动态":"https://opcflt.hnair.com/hnairweb/","不正常航班证明":"https://zzgq.hnair.com/ywzm# 仅限微信小程序、APP、公众号"},
+        "JD": {"航空公司":"首都航空","票证":"898","官网":"https://www.jdair.net/","国内运输总条件":"https://www.jdair.net/micro/main/help/64392c6094632632c02d842d","国内客票使用条件":"https://www.jdair.net/micro/main/help/64376c3c32d30b32bac1c73c","购票须知":"https://www.jdair.net/micro/main/help/6435338dfe88a532b32f6413","错购规定":"https://www.jdair.net/micro/main/help/66456614840a685ae14aac62","重复购票规定":"https://www.jdair.net/micro/main/help/6437715153c6fc32c6d66329","改名改证件规定":"https://www.jdair.net/micro/main/help/66456614840a685ae14aac62","病退规定":"https://www.jdair.net/micro/main/help/64376d6332d30b32bac1c7da","客票验证":"https://www.jdair.net/micro/main/ticketVerify  仅验真","航班动态":"https://www.jdair.net/micro/main/flight/status","不正常航班证明":"https://www.jdair.net/micro/main/delay/segment"},
+        "JR": {"航空公司":"幸福航空","票证":"929","官网":"https://www.joy-air.com/","国内运输总条件":"https://www.joy-air.com/TravelTransportConditions","国内客票使用条件":"https://www.joy-air.com/travel-help/text/138","购票须知":"https://www.joy-air.com/travel-help/text/34","错购规定":"略","重复购票规定":"略","改名改证件规定":"略","病退规定":"略","客票验证":"略","航班动态":"https://www.joy-air.com/flightDynamics","不正常航班证明":"https://www.joy-air.com/abnormalFlightDelayCertificate"},
+        "KN": {"航空公司":"联合航空","票证":"822","官网":"https://www.flycua.com/","国内运输总条件":"https://info.flycua.com/jcms/publish/newb2c/gnysztj/index.html","国内客票使用条件":"https://info.flycua.com/jcms/publish/newb2c/gnyjsygz/index.html","购票须知":"https://info.flycua.com/jcms/publish/newb2c/gnlkxz/index.html","错购规定":"略","重复购票规定":"略","改名改证件规定":"略","病退规定":"略","客票验证":"在线客服机器人自助查询，有价格，客票状态只有【已使用】能用","航班动态":"https://www.flycua.com/aoc/","不正常航班证明":"https://m.flycua.com/h5/flightDelay/toSearchPage.html 必须登录"},
+        "KY": {"航空公司":"昆明航空","票证":"833","官网":"https://www.airkunming.com/","国内运输总条件":"https://www.airkunming.com/#/doc/detail/1/7360","国内客票使用条件":"https://www.airkunming.com/#/doc/detail/1/8256","购票须知":"https://www.airkunming.com/#/doc/detail/1/7656","错购规定":"略","重复购票规定":"略","改名改证件规定":"略","病退规定":"略","客票验证":"略","航班动态":"https://www.airkunming.com/#/flight/dynamic/0","不正常航班证明":"https://www.airkunming.com/#/flight/delay/index"},
+        "LT": {"航空公司":"龙江航空","票证":"867","官网":"https://www.longjianghk.com/","国内运输总条件":"https://www.longjianghk.com/stcontent/menupage/991fe8e5-08c1-4b9e-9c5a-3beaf3c4aec2/25aebea9-f5d5-41ca-be6f-f35a0f52f2f4/8d594ba4-60e9-4cad-81fc-1807fad5bdb1","国内客票使用条件":"https://www.longjianghk.com/stcontent/menupage/991fe8e5-08c1-4b9e-9c5a-3beaf3c4aec2/25aebea9-f5d5-41ca-be6f-f35a0f52f2f4/7c8f5899-2253-4c08-90ae-eda373d0185b","购票须知":"https://www.longjianghk.com/stcontent/menupage/991fe8e5-08c1-4b9e-9c5a-3beaf3c4aec2/25aebea9-f5d5-41ca-be6f-f35a0f52f2f4/29300fb1-e1a7-47b7-8eb3-5c3ce69a04cd","错购规定":"略","重复购票规定":"略","改名改证件规定":"略","病退规定":"略","客票验证":"略","航班动态":"https://www.longjianghk.com/dynamic","不正常航班证明":"https://www.longjianghk.com/proofSearch"},
+        "MF": {"航空公司":"厦门航空","票证":"731","官网":"https://www.xiamenair.com/","国内运输总条件":"https://www.xiamenair.com/brandnew_CN/travel-transport-condition.html","国内客票使用条件":"https://www.xiamenair.com/brandnew_CN/travel-transport-ticket-price1.html","购票须知":"https://www.xiamenair.com/brandnew_CN/passenger-service/purchasing-guide.html","错购规定":"https://www.xiamenair.com/brandnew_CN/travel-transport-modify.html","重复购票规定":"https://www.xiamenair.com/brandnew_CN/travel-transport-modify.html","改名改证件规定":"https://www.xiamenair.com/brandnew_CN/travel-transport-modify.html","病退规定":"参见国内客票使用条件","客票验证":"https://s.xiamenair.com/414cd2b 必须登录","航班动态":"https://www.xiamenair.com/zh-cn/flight-dynamic.html","不正常航班证明":"https://www.xiamenair.com/zh-cn/abnormal-flight-proof.html"},
+        "MU": {"航空公司":"东方航空","票证":"781","官网":"https://www.ceair.com/","国内运输总条件":"https://www.ceair.com/global/static/Announcement/TravelTips/dsGeneralCondition/chinaEasternLuggageRules/domesticRules/index.html","国内客票使用条件":"https://www.ceair.com/global/static/Announcement/ScheduledGuidelines/passengerNotice/domesticTicketUseConditions/","购票须知":"https://www.ceair.com/global/static/Announcement/ScheduledGuidelines/passengerNotice/domesticTicketUseConditions/","错购规定":"https://www.ceair.com/global/static/Announcement/ScheduledGuidelines/passengerNotice/SpecialRefundChangeRequire/","重复购票规定":"https://www.ceair.com/global/static/Announcement/ScheduledGuidelines/passengerNotice/SpecialRefundChangeRequire/","改名改证件规定":"https://www.ceair.com/global/static/Announcement/ScheduledGuidelines/passengerNotice/SpecialRefundChangeRequire/","病退规定":"https://www.ceair.com/global/static/Announcement/ScheduledGuidelines/passengerNotice/SpecialRefundChangeRequire/","客票验证":"https://www.ceair.com/self-service/after-service/check-ticket 仅验真，微信小程序可查价格","航班动态":"https://www.ceair.com/self-service/before/flight-status 官网不显示变动原因，APP及微信小程序会展示变动原因","不正常航班证明":"https://ebapp.ceair.com/IrregularFlight/WebApp/IrrPrint/common.html"},
+        "NS": {"航空公司":"河北航空","票证":"836","官网":"https://www.hbhk.com.cn/","国内运输总条件":"https://www.hbhk.com.cn/serve/webView/9285","国内客票使用条件":"https://www.hbhk.com.cn/serve/webView/9287","购票须知":"略","错购规定":"略","重复购票规定":"略","改名改证件规定":"略","病退规定":"略","客票验证":"https://s.xiamenair.com/414cd2b 这个是厦航的客票验证，必须登录","航班动态":"https://www.hbhk.com.cn/flightStatus","不正常航班证明":"https://www.hbhk.com.cn/serve/delayProve"},
+        "PN": {"航空公司":"西部航空","票证":"847","官网":"http://pgs.westair.cn/","国内运输总条件":"https://www.westair.cn/stcontent/menupage/fe61b2ec-9adb-4033-9d00-3297748aa1cc/1d59648d-9ea4-471b-bffc-f516589f5f3b/5a194449-1343-4b8b-8d08-12e474043223","国内客票使用条件":"https://www.westair.cn/stcontent/menupage/fe61b2ec-9adb-4033-9d00-3297748aa1cc/88f48e03-163c-4dd9-9229-8be70d1ba853/7a2fd9e5-8940-41bf-8102-8aa2b4a7ec5f","购票须知":"https://www.westair.cn/stcontent/menupage/fe61b2ec-9adb-4033-9d00-3297748aa1cc/88f48e03-163c-4dd9-9229-8be70d1ba853/41117d4c-695a-45ba-a491-36d5b9e27e27/f1c2fa60-d3d4-4110-9658-8b2525622b2a","错购规定":"略","重复购票规定":"略","改名改证件规定":"略","病退规定":"略","客票验证":"微信小程序，仅验真","航班动态":"微信小程序","不正常航班证明":"微信小程序"},
+        "QW": {"航空公司":"青岛航空","票证":"912","官网":"https://www.qdairlines.com/","国内运输总条件":"https://www.qdairlines.com/articles?cur=111&par=19","国内客票使用条件":"https://dfsb2c.qdairlines.com/group1/M00/00/E9/Ch4VOGM1BAWAekl2AAf6_y7P6Lc677.pdf","购票须知":"略","错购规定":"略","重复购票规定":"略","改名改证件规定":"略","病退规定":"略","客票验证":"在线客服机器人自助查询，仅限客票状态","航班动态":"https://www.qdairlines.com/self/flightSearch?cur=39&par=17","不正常航班证明":"https://www.qdairlines.com/service/delayCertificate"},
+        "RY": {"航空公司":"江西航空","票证":"989","官网":"https://www.airjiangxi.com/","国内运输总条件":"https://www.airjiangxi.com/jiangxiair/outhelp/generalTrans.action","国内客票使用条件":"https://www.airjiangxi.com/jiangxiair/outhelp/newPricesConditions.action","购票须知":"https://www.airjiangxi.com/jiangxiair/outhelp/passNotice.action","错购规定":"略","重复购票规定":"https://www.airjiangxi.com/jiangxiair/outhelp/fraudInformation.action?query=new-20181021","改名改证件规定":"https://www.airjiangxi.com/jiangxiair/outhelp/psgRenameRule.action","病退规定":"参见客票使用条件","客票验证":"https://s.xiamenair.com/414cd2b 这个是厦航的客票验证，必须登录","航班动态":"https://www.airjiangxi.com/jiangxiair/flight-dynamic/flightDynamic.action","不正常航班证明":"https://www.airjiangxi.com/jiangxiair/certificate/toCertificatePrint.action"},
+        "SC": {"航空公司":"山东航空","票证":"324","官网":"https://www.sda.cn/","国内运输总条件":"https://www.sda.cn/about/news/show/3165.html","国内客票使用条件":"https://www.sda.cn/about/news/show/3683.html","购票须知":"https://www.sda.cn/webuser/buyTicketAttention.html","错购规定":"参见购票须知","重复购票规定":"参见购票须知","改名改证件规定":"参见购票须知","病退规定":"参见购票须知","客票验证":"略","航班动态":"https://www.sda.cn/dyflight/search.shtml 只支持查询当日航班","不正常航班证明":"https://flights.sda.cn/flight/irregularCertificate"},
+        "TV": {"航空公司":"西藏航空","票证":"088","官网":"https://www.tibetairlines.com.cn/","国内运输总条件":"https://www.tibetairlines.com.cn/stdair/airline/tv/static_term/help_Ticketregulations?sign=true","国内客票使用条件":"https://www.tibetairlines.com.cn/stdair/airline/tv/static_term/help_Ticketregulations?sign=true","购票须知":"https://www.tibetairlines.com.cn/stdair/airline/tv/static_term/help_Passengersnotice?sign=true","错购规定":"参见购票须知","重复购票规定":"参见购票须知","改名改证件规定":"参见购票须知","病退规定":"参见购票须知","客票验证":"略","航班动态":"https://www.tibetairlines.com.cn/stdair/flightDynamics/flightDynamicsMain","不正常航班证明":"微信小程序"},
+        "UQ": {"航空公司":"乌鲁木齐航空","票证":"886","官网":"https://www.urumqi-air.com/","国内运输总条件":"https://www.urumqi-air.com/micro/main/help/63db6a54257effa4641ba47d","国内客票使用条件":"https://www.urumqi-air.com/micro/main/help/63ef1036a609290fe2cb6558","购票须知":"https://www.urumqi-air.com/micro/main/help/63db6a54257effa4641ba473","错购规定":"略","重复购票规定":"略","改名改证件规定":"略","病退规定":"略","客票验证":"https://www.urumqi-air.com/micro/main/ticketVerify 仅验真","航班动态":"https://www.urumqi-air.com/micro/main/flight/status","不正常航班证明":"https://www.urumqi-air.com/micro/main/delay/segment"},
+        "Y8": {"航空公司":"金鹏航空","票证":"871","官网":"https://www.yzr.com.cn/","国内运输总条件":"https://www.yzr.com.cn/micro/main/help/63d9ff0c6345b43cbd1e4165","国内客票使用条件":"https://www.yzr.com.cn/micro/main/help/63c908c5a926ca6f89255696","购票须知":"https://www.yzr.com.cn/micro/main/help/63c908c5a926ca6f89255696","错购规定":"略","重复购票规定":"略","改名改证件规定":"略","病退规定":"略","客票验证":"https://www.yzr.com.cn/micro/main/ticketVerify 仅验真，必须登录","航班动态":"https://www.yzr.com.cn/micro/main/flight/status?","不正常航班证明":"https://www.yzr.com.cn/micro/main/delay/segment"},
+        "ZH": {"航空公司":"深圳航空","票证":"479","官网":"https://www.shenzhenair.com/","国内运输总条件":"https://www.shenzhenair.com/szair_B2C/getMsgInfo.action?msgId=ee8cdc3266694bb18a60cd0c7391550a","国内客票使用条件":"https://www.shenzhenair.com/szair_B2C/getMsgInfo.action?msgId=6e56192ca7824bd2bef2df4873435719","购票须知":"https://www.shenzhenair.com/szair_B2C/staticPage.action?htmlName=gpts","错购规定":"略","重复购票规定":"参见购票须知","改名改证件规定":"参见购票须知","病退规定":"参见购票须知","客票验证":"小程序，可验证客票状态、价格、退款","航班动态":"https://www.shenzhenair.com/szair_B2C/initFlightDynamic.action","不正常航班证明":"https://www.shenzhenair.com/szair_B2C/certificateOfDelay/initCertificateOfDelay.action"}
+    };
+        
+        // 机场原始数据字符串
+        const airportRawData = `三字代码,机场名称
+AAT,阿勒泰雪都机场
+ACX,兴义万峰林机场
+AEB,百色巴马机场
+AHJ,阿坝红原机场
+AKA,安康富强机场
+AKU,阿克苏红旗坡机场
+AOG,鞍山腾鳌机场
+APJ,阿里普兰机场
+AQG,安庆天柱山机场
+AVA,安顺黄果树机场
+AXF,阿拉善左旗巴彦浩特机场
+BAR,琼海博鳌国际机场
+BAV,包头东河机场
+BFJ,毕节飞雄机场
+BHY,北海福成机场
+BPE,秦皇岛北戴河机场
+BPL,博乐阿拉山口机场
+BPX,昌都邦达机场
+BSD,保山云瑞机场
+YIE,阿尔山伊尔施机场
+CAN,广州白云国际机场
+RHT,阿拉善右旗巴丹吉林机场
+RLK,巴彦淖尔天吉泰机场
+BZX,巴中恩阳机场
+CGO,郑州新郑国际机场
+CGQ,长春龙嘉国际机场
+DBC,白城长安机场
+CBZ,滨州大高机场
+KJI,布尔津喀纳斯机场
+CKG,重庆江北国际机场
+CWJ,沧源佤山机场
+CGD,常德桃花源机场
+CSX,长沙黄花国际机场
+CTU,成都双流国际机场
+CHG,朝阳三燕机场
+CZX,常州奔牛国际机场
+DAT,大同云冈机场
+CDE,承德普宁机场
+CIF,赤峰玉龙机场
+DAX,达州河市机场
+DLU,大理凤仪机场
+DEQ,莫干山通用机场
+DQA,大庆萨尔图机场
+DDG,丹东浪头机场
+DLC,大连周水子国际机场
+DFA,丹凤通用机场
+DNH,敦煌莫高国际机场
+DOY,东营胜利机场
+DCY,稻城亚丁机场
+DSN,鄂尔多斯伊金霍洛国际机场
+LUM,德宏芒市国际机场
+DXJ,湘西边城机场
+DXQ,西庆机场
+DYG,张家界荷花国际机场
+DIG,迪庆香格里拉机场
+EJN,额济纳旗桃来机场
+EQQ,鄂托克前旗机场
+ENH,恩施许家坪机场
+ERL,二连浩特赛乌素机场
+FOC,福州长乐国际机场
+FUG,阜阳西关机场
+FUO,佛山沙堤机场
+FYJ,抚远东极机场
+FYN,富蕴可可托海机场
+GXH,甘南夏河机场
+GOQ,格尔木机场
+GZG,格萨尔机场
+GYS,广元盘龙机场
+GYU,固原六盘山机场
+GMQ,果洛玛沁机场
+HAK,海口美兰国际机场
+HMI,哈密伊州机场
+HXD,海西德令哈机场
+HDG,邯郸机场
+HFE,合肥新桥国际机场
+HET,呼和浩特白塔国际机场
+HEW,横店通用机场
+HTN,和田昆冈机场
+HGH,杭州萧山国际机场
+HIA,淮安涟水国际机场
+HCJ,河池金城江机场
+HLD,呼伦贝尔海拉尔机场
+HEK,黑河机场
+HTT,海西花土沟机场
+HNY,衡阳南岳机场
+HJJ,怀化芷江机场
+HQQ,安阳红旗渠机场
+HRB,哈尔滨太平国际机场
+TXN,黄山屯溪机场
+HUZ,惠州平潭机场
+HUO,霍林郭勒霍林河机场
+JXA,鸡西兴凯湖机场
+JGD,加格达奇嘎仙机场
+JSJ,建三江机场
+SWA,揭阳潮汕机场
+HZA,菏泽牡丹机场
+HZG,汉中城固机场
+JIC,金昌金川机场
+INC,银川河东机场
+SHS,荆州沙市机场
+JIU,九江庐山机场
+JZH,九寨沟黄龙机场
+JDZ,景德镇罗家机场
+KJH,凯里黄平机场
+JGN,嘉峪关酒泉机场
+JGS,井冈山机场
+JHG,西双版纳嘎洒国际机场
+KGT,康定机场
+JIQ,黔江武陵山机场
+KRY,克拉玛依机场
+JJN,泉州晋江国际机场
+KCA,库车龟兹机场
+JMU,佳木斯东郊机场
+JNG,济宁大安机场
+JNZ,锦州锦州湾机场
+LFH,兰坪丰华机场
+JUH,池州九华山机场
+JUZ,衢州机场
+JMJ,澜沧景迈机场
+HZH,黎平机场
+LNJ,临沧机场
+LFQ,临汾尧都机场
+KHG,喀什徕宁国际机场
+LYI,临沂启阳机场
+LPF,六盘水月照机场
+LCS,陇川广宋机场
+KMG,昆明长水国际机场
+KOW,赣州黄金机场
+KRL,库尔勒梨城机场
+LNL,陇南成县机场
+KWE,贵阳龙洞堡国际机场
+KWL,桂林两江国际机场
+LZO,泸州云龙机场
+LLV,吕梁大武机场
+LCX,龙岩冠豸山机场
+LDS,伊春林都机场
+NZH,满洲里西郊机场
+MXZ,梅县机场
+LHW,兰州中川国际机场
+LJG,丽江三义国际机场
+OHE,漠河古莲机场
+NJJ,墨尔根机场
+NLT,那拉提机场
+KHN,南昌昌北国际机场
+NAO,南充高坪机场
+NTG,南通兴东机场
+NLH,宁蒗泸沽湖机场
+LXA,拉萨贡嘎国际机场
+LYA,洛阳北郊机场
+LYG,连云港花果山机场
+PZI,攀枝花保安营机场
+LZG,阆中古城机场
+LZH,柳州白莲机场
+SYM,普洱思茅机场
+NDG,齐齐哈尔三家子机场
+LZY,林芝米林机场
+MDG,牡丹江海浪机场
+MIG,绵阳南郊机场
+MQI,莫旗通用机场
+HBQ,祁连海北机场
+JDE,千岛湖通用机场
+NBS,白山长白山机场
+LLB,黔南荔波机场
+NGB,宁波栎社国际机场
+NGQ,阿里昆莎机场
+IQM,且末玉都机场
+NKG,南京禄口国际机场
+TAO,青岛胶东国际机场
+IQN,庆阳机场
+NNG,南宁吴圩国际机场
+NNY,南阳姜营机场
+RKZ,日喀则和平机场
+RIZ,日照山字河机场
+RQA,若羌楼兰机场
+SQJ,三明沙县机场
+PEK,北京首都国际机场
+PKX,北京大兴国际机场
+PVG,上海浦东国际机场
+QSZ,莎车机场
+XMN,厦门高崎国际机场
+SXJ,鄯善机场
+WGN,邵阳武冈机场
+HPG,神农架红坪机场
+WDS,十堰武当山机场
+ROQ,阿荣机场
+SHF,石河子花园机场
+SHA,上海虹桥国际机场
+SHE,沈阳桃仙国际机场
+LCT,石家庄栾城机场
+YSQ,松原查干湖机场
+SJW,石家庄正定国际机场
+SQD,上饶三清山机场
+WUX,无锡硕放机场
+TCG,塔城千泉机场
+HYN,台州路桥机场
+TYC,太原尧城机场
+SYX,三亚凤凰国际机场
+SZH,朔州滋润机场
+SZX,深圳宝安国际机场
+TCZ,腾冲驼峰机场
+THQ,天水机场
+TNH,通化三源浦机场
+TEN,铜仁凤凰机场
+TFU,成都天府国际机场
+TGO,通辽机场
+TWC,图木舒克唐王城机场
+TLQ,吐鲁番交河机场
+TNA,济南遥墙国际机场
+WEH,威海大水泊机场
+TSN,天津滨海国际机场
+TVS,唐山三女河机场
+WEF,潍坊南苑机场
+WNZ,温州龙湾国际机场
+WNH,文山普者黑机场
+TYN,太原武宿国际机场
+WUA,乌海机场
+URC,乌鲁木齐天山国际机场
+UYN,榆林榆阳机场
+WZQ,乌拉特中旗机场
+UCB,乌兰察布机场
+HLH,乌兰浩特义勒力特机场
+WUZ,梧州西江机场
+DTU,五大连池德都机场
+WUT,忻州五台山机场
+CQW,重庆仙女山机场
+WUS,武夷山机场
+XIC,西昌青山机场
+WUH,武汉天河国际机场
+XIL,锡林浩特机场
+XHQ,镶黄旗新宝拉格机场
+XAI,信阳明港机场
+XUZ,徐州观音国际机场
+WXN,万州五桥机场
+YNT,烟台蓬莱国际机场
+ENY,延安南泥湾机场
+XFN,襄阳刘集机场
+YNZ,盐城南洋机场
+YTY,扬州泰州机场
+YBP,宜宾五粮液机场
+XIY,西安咸阳国际机场
+YIC,宜春明月山机场
+XNN,西宁曹家堡机场
+XNT,邢台褡裢机场
+YIW,义乌机场
+YKH,营口兰旗机场
+YCU,运城盐湖国际机场
+LLF,永州零陵机场
+YGA,永川大安通用机场
+YTW,于田万方机场
+YIH,宜昌三峡国际机场
+YIN,伊宁机场
+YLX,玉林福绵机场
+YYA,岳阳三荷机场
+NZL,扎兰屯成吉思汗机场
+YNJ,延吉朝阳川机场
+ZHA,湛江吴川机场
+YZY,张掖甘州机场
+CNI,长海大长山岛机场
+CIH,长治王村机场
+ZAT,昭通机场
+YUN,密云机场
+YUS,玉树巴塘机场
+WSK,重庆巫山机场
+HSN,舟山普陀山国际机场
+LZL,珠海莲洲通用机场
+WMT,遵义茅台机场
+ZHY,中卫沙坡头机场
+ZQZ,张家口宁远机场
+ZUH,珠海金湾机场
+ZYI,遵义新舟机场`;
+
+        // --- 互动回复 ---
+        const one_answer = ["你1什么1？", "你跟谁俩1呢？", "你在搞什么？", "别别别，千万别", "其实我很想回你111，但是我又怕你误会111是计算结果", "啥意思？", "别给我来这套", "咋地了？", "没懂你意思", "能说点我能懂的吗？", "啥啊你就1？", "好的好的, 收到收到", "不明白, 不明白", "嘿嘿, 嘿嘿嘿", "别1了, 想想待会吃什么"];
+
+        // --- DOM 元素 ---
+        const terminal = document.getElementById('terminal');
+        const output = document.getElementById('output');
+        const input = document.getElementById('input');
+
+        // --- 数据处理 ---
+        const airportCodeToName = {};
+        const airportNameToCode = {};
+        const airlineTicketToCode = {};
+
+        function parseAirportData() {
+            const lines = airportRawData.trim().split('\n');
+            if (lines.length <= 1) return;
+            for (let i = 1; i < lines.length; i++) {
+                const [code, name] = lines[i].split(',');
+                if (code && name) {
+                    const cleanCode = code.trim();
+                    const cleanName = name.trim();
+                    airportCodeToName[cleanCode] = cleanName;
+                    airportNameToCode[cleanName.toUpperCase()] = cleanCode;
+                }
+            }
+        }
+
+        function parseAirlineData() {
+            for (const code in AIRLINE_DETAIL_DATA) {
+                const info = AIRLINE_DETAIL_DATA[code];
+                if (info && info['票证'] && info['票证'] !== '略') {
+                    airlineTicketToCode[info['票证']] = code;
+                }
+            }
+        }
+
+        // --- 核心功能函数 ---
+        
+        function printToTerminal(text, isCommand = false) {
+            const line = document.createElement('div');
+            line.className = 'mb-1 font-mono whitespace-pre-wrap break-words';
+            
+            let contentHTML;
+            if (isCommand) {
+                const escapedCommand = text.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+                contentHTML = `<span class="text-green-400 select-none">&gt;</span> <span class="text-gray-200">${escapedCommand}</span>`;
+            } else {
+                const urlRegex = /(https?:\/\/[^\s]+)/g;
+                let sanitizedText = text.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+                contentHTML = sanitizedText.replace(urlRegex, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
+            }
+            line.innerHTML = contentHTML;
+            output.appendChild(line);
+            output.scrollTop = output.scrollHeight;
+        }
+        
+        function safeCalc(ex) {
+            const safePattern = /^[0-9\.\+\-\*\/\(\)\s]+$/;
+            if (!safePattern.test(ex)) return null;
+            try {
+                const result = new Function('return ' + ex)();
+                if (typeof result === 'number' && isFinite(result)) return `=${result};`;
+                return null;
+            } catch (e) {
+                return null;
+            }
+        }
+
+        function findAirlineInfo(query) {
+            const skip_values = ["略", "无", "-", "N/A", "nan", "", null];
+            let airlineCode = null;
+            if (AIRLINE_DETAIL_DATA[query]) airlineCode = query;
+            else if (airlineTicketToCode[query]) airlineCode = airlineTicketToCode[query];
+            if (!airlineCode) return null;
+            const info = AIRLINE_DETAIL_DATA[airlineCode];
+            let result = '';
+            const addLine = (key, value) => {
+                 if (value && !skip_values.includes(String(value).trim())) result += `◆ ${key}: ${value}\n`;
+            };
+            addLine('二字代码', airlineCode);
+            for (const key in info) addLine(key, info[key]);
+            if (result) {
+                result += '--------------------------------------';
+                return result;
+            }
+            return null;
+        }
+
+        function findAirportInfo(query) {
+            let airportName = null;
+            if (airportCodeToName[query]) airportName = airportCodeToName[query];
+            else if (airportNameToCode[query]) {
+                const code = airportNameToCode[query];
+                airportName = airportCodeToName[code];
+            }
+            if (airportName) {
+                let result = `${airportName}\n`;
+                result += '--------------------------------------';
+                return result;
+            }
+            return null;
+        }
+
+        function find2AirportInfo(query) {
+            if (query.length !== 6) return null;
+            const firstCode = query.substring(0, 3);
+            const lastCode = query.substring(3, 6);
+            const firstName = airportCodeToName[firstCode];
+            const lastName = airportCodeToName[lastCode];
+            if (firstName && lastName) {
+                let result = `${firstName}到${lastName}\n`;
+                result += '--------------------------------------';
+                return result;
+            }
+            return null;
+        }
+        
+        // --- 事件处理 ---
+
+        function autoResizeTextarea() {
+            input.style.height = 'auto';
+            input.style.height = input.scrollHeight + 'px';
+        }
+
+        input.addEventListener('input', autoResizeTextarea);
+
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                const command = input.value.trim();
+                if (command) {
+                    handleCommand(command);
+                }
+                input.value = '';
+                autoResizeTextarea();
+                input.focus();
+            }
+        });
+        
+        /**
+         * **关键改动**: 修改点击事件以允许文本选择
+         */
+        terminal.addEventListener('click', (e) => {
+            // 如果用户刚刚选择了文本，则不执行任何操作，以允许复制
+            if (window.getSelection().toString()) {
+                return;
+            }
+
+            // 如果点击的是链接或输入区域，则让默认行为发生
+            if (e.target.closest('a') || e.target.closest('#input-line')) {
+                return;
+            }
+
+            // 对于其他所有点击（如点击终端的空白区域），聚焦到输入框
+            input.focus();
+        });
+
+        function handleCommand(ex) {
+            printToTerminal(ex, true);
+            const upperEx = ex.toUpperCase();
+            let commandHandled = false;
+
+            switch (upperEx) {
+                case 'HELP':
+                    printToTerminal('可用指令:\n- [数学表达式]: 进行计算, e.g., 5 * (10 + 2)\n- [航司二字码/票证号]: 查询航司信息, e.g., CA 或 999\n- [机场三字码]: 查询机场信息, e.g., PEK\n- [三字码1+三字码2]: 查询航线, e.g., PEKPVG\n- CLEAR: 清空屏幕');
+                    commandHandled = true;
+                    break;
+                case '1':
+                    printToTerminal(one_answer[Math.floor(Math.random() * one_answer.length)]);
+                    commandHandled = true;
+                    break;
+                case 'CLEAR':
+                    output.innerHTML = '';
+                    commandHandled = true;
+                    break;
+            }
+
+            if (commandHandled) return;
+
+            let resultsFound = false;
+            const calcResult = safeCalc(ex);
+            if (calcResult) {
+                printToTerminal(calcResult);
+                resultsFound = true;
+            }
+            const airlineResult = findAirlineInfo(upperEx);
+            if (airlineResult) {
+                printToTerminal(airlineResult);
+                resultsFound = true;
+            }
+            const airportResult = findAirportInfo(upperEx);
+            if (airportResult) {
+                printToTerminal(airportResult);
+                resultsFound = true;
+            }
+            const twoAirportResult = find2AirportInfo(upperEx);
+            if (twoAirportResult) {
+                printToTerminal(twoAirportResult);
+                resultsFound = true;
+            }
+        }
+
+        // --- 初始化 ---
+        function init() {
+            parseAirportData();
+            parseAirlineData();
+            printToTerminal("输入 'help' 查看可用指令。");
+            input.focus();
+            autoResizeTextarea();
+        }
+
+        init();
+    </script>
+</body>
+</html>
